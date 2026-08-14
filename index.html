@@ -1,22 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0F766E" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Home Base" />
-  <link rel="manifest" href="/manifest.json" />
-  <title>Home Base</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    * { -webkit-tap-highlight-color: transparent; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overscroll-behavior: none; }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
-</body>
-</html>
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = 'https://ktqrfgrfksfsoepiclnt.supabase.co'
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0cXJmZ3Jma3Nmc29lcGljbG50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2OTM0NTQsImV4cCI6MjEwMjI2OTQ1NH0.F1xgcqISyHue_RIm08pg-IkVmuGNhQz6wblUzsw2v7I'
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
