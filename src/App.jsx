@@ -14,11 +14,11 @@ const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 
 const CAT={
   home:{label:"Home",icon:"\u{1F3E0}",
-    card:"linear-gradient(135deg,#0D9488,#0F766E)",accent:"#0F766E",hdr:"#0F766E",light:"#F0FDFA"},
+    card:"linear-gradient(135deg,#EC4899,#BE185D)",accent:"#BE185D",hdr:"#9D174D",light:"#FDF2F8"},
   admin:{label:"Life Admin",icon:"\u{1F4CB}",
-    card:"linear-gradient(135deg,#DC2626,#B91C1C)",accent:"#B91C1C",hdr:"#991B1B",light:"#FEF2F2"},
+    card:"linear-gradient(135deg,#2563EB,#1D4ED8)",accent:"#1D4ED8",hdr:"#1E40AF",light:"#EFF6FF"},
   personal:{label:"Projects",icon:"\u{1F680}",
-    card:"linear-gradient(135deg,#7C3AED,#6D28D9)",accent:"#6D28D9",hdr:"#5B21B6",light:"#F5F3FF"},
+    card:"linear-gradient(135deg,#16A34A,#15803D)",accent:"#15803D",hdr:"#166534",light:"#F0FDF4"},
 };
 const PRI_C={high:{b:"#DC2626",p:"bg-red-50 text-red-700"},medium:{b:"#D97706",p:"bg-amber-50 text-amber-700"},low:{b:"#2563EB",p:"bg-blue-50 text-blue-700"}};
 
@@ -341,8 +341,8 @@ export default function App(){
   if(!user)return(
     <div className="min-h-screen flex items-center justify-center p-6 bg-white">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-black text-stone-900 tracking-tight text-center">Home Base</h1>
-        <p className="text-stone-400 mt-1 text-sm font-medium text-center mb-8">Your shared home command center</p>
+        <h1 className="text-3xl font-black text-stone-900 tracking-tight">Home Base</h1>
+        <p className="text-stone-400 mt-1 text-sm font-medium text-center mb-8">GDKP command center</p>
         <input type="text" value={nameIn} onChange={e=>setNameIn(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&nameIn.trim()&&saveName(nameIn.trim())}
           placeholder="Your first name" autoFocus
