@@ -119,6 +119,8 @@ export default function App(){
   const[celebrating,setCelebrating]=useState(null);
   const[dailyIds,setDailyIds]=useState([]);
   const[notifStatus,setNotifStatus]=useState(()=>getNotificationStatus());
+  const[picking,setPicking]=useState(false);
+  const[completedToday,setCompletedToday]=useState([]);
 
   const enableNotifs=async()=>{const s=await setupNotifications(user);setNotifStatus(s);};
   const load=useCallback(async()=>{
@@ -182,6 +184,25 @@ export default function App(){
   const now=new Date();
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
   const dailyTasks=dailyIds.map(id=>tasks.find(t=>t.id===id)).filter(Boolean).map(enrich);
+
+  // Load completed today
+  useEffect(()=>{
+    const today=new Date();today.setHours(0,0,0,0);
+    supabase.from("completions").select("*,tasks(name,category,estimated_min)")
+      .gte("completed_at",today.toISOString()).order("completed_at",{ascending:false})
+      .then(({data})=>{if(data)setCompletedToday(data);});
+  },[tasks]);
+
+  // Add a task to today
+  const addToDaily=id=>{
+    if(dailyIds.includes(id))return;
+    saveDailyIds([...dailyIds,id]);
+    setPicking(false);
+  };
+
+  // Available tasks to pick from
+  const pickable=tasks.map(enrich).filter(t=>isDue(t)&&!dailyIds.includes(t.id))
+    .sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
 
   if(timer)return<Timer task={timer} onDone={()=>{complete(timer.id);setTimer(null);}} onCancel={()=>setTimer(null)}/>;
 
@@ -267,9 +288,9 @@ export default function App(){
 
         {/* Daily tasks */}
         <div className="mt-4 space-y-2.5">
-          {dailyTasks.length===0?
-            <div className="py-12 text-center">
-              <p className="text-stone-400 text-base font-medium">Nothing due. You're clear.</p></div>
+          {dailyTasks.length===0&&!picking?
+            <div className="py-10 text-center">
+              <p className="text-stone-400 text-base font-medium">Nothing assigned yet.</p></div>
           :dailyTasks.map((task,idx)=>{
             const c=CAT[task.category]||CAT.home;
             const isCel=celebrating===idx;
@@ -293,7 +314,46 @@ export default function App(){
                 </>}
               </div>
             </div>;})}
+
+          {/* Add to today button */}
+          <button onClick={()=>setPicking(!picking)}
+            className="w-full py-3 rounded-2xl border-2 border-dashed border-stone-200 text-sm font-bold text-stone-400 active:bg-stone-50 transition-all">
+            {picking?"Cancel":"+ Add task to today"}
+          </button>
         </div>
+
+        {/* Task picker */}
+        {picking&&<div className="mt-3 bg-stone-50 rounded-2xl p-4">
+          {pickable.length===0?<p className="text-sm text-stone-400 text-center py-4">No more due tasks to add.</p>
+          :<div className="space-y-1">
+            {pickable.map(t=>{const c=CAT[t.category]||CAT.home;return(
+              <button key={t.id} onClick={()=>addToDaily(t.id)}
+                className="w-full text-left px-4 py-3 rounded-xl active:bg-white transition-all flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">{t.name}</p>
+                  <p className="text-xs text-stone-400 mt-0.5">{c.icon} {c.label} &middot; {t.estimated_min}m &middot; <span className={t.s==="overdue"?"text-red-600 font-semibold":t.s==="due"?"text-amber-600":"text-stone-400"}>{t.l}</span></p>
+                </div>
+                <span className="text-stone-300 text-lg">+</span>
+              </button>
+            );})}
+          </div>}
+        </div>}
+
+        {/* Completed today */}
+        {completedToday.length>0&&<div className="mt-6">
+          <p className="text-sm font-bold text-stone-400 uppercase tracking-wider mb-2">Done today</p>
+          <div className="space-y-1">
+            {completedToday.map(c=>{const cat=CAT[c.tasks?.category]||CAT.home;return(
+              <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-stone-50">
+                <span className="text-emerald-500 font-bold">&#10003;</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-stone-500">{c.tasks?.name||"Task"}</p>
+                </div>
+                <span className="text-xs text-stone-300 font-medium">{c.completed_by} &middot; {new Date(c.completed_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span>
+              </div>
+            );})}
+          </div>
+        </div>}
 
         {/* Category nav */}
         <div className="mt-6 grid grid-cols-3 gap-2.5">
