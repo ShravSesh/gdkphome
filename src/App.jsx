@@ -121,7 +121,9 @@ export default function App(){
   const[notifStatus,setNotifStatus]=useState(()=>getNotificationStatus());
   const[picking,setPicking]=useState(false);
   const[completedToday,setCompletedToday]=useState([]);
-  const[momentum,setMomentum]=useState(null); // task to suggest after completing
+  const[momentum,setMomentum]=useState(null);
+  const[captureText,setCaptureText]=useState("");
+  const[streak,setStreak]=useState(0);
 
   const enableNotifs=async()=>{const s=await setupNotifications(user);setNotifStatus(s);};
   const load=useCallback(async()=>{
@@ -206,6 +208,34 @@ export default function App(){
     const pick=pool[0];
     setTimer({...pick,estimated_min:5,_originalMin:pick.estimated_min});
   };
+
+  // Quick capture - saves as an inbox task
+  const quickCapture=async()=>{
+    if(!captureText.trim())return;
+    await supabase.from("tasks").insert({name:captureText.trim(),category:"admin",frequency:"daily",
+      frequency_days:1,priority:"medium",estimated_min:10});
+    setCaptureText("");await load();
+  };
+
+  // Streak calculation
+  useEffect(()=>{
+    if(!user)return;
+    supabase.from("completions").select("completed_at").eq("completed_by",user)
+      .order("completed_at",{ascending:false}).limit(200)
+      .then(({data})=>{
+        if(!data||!data.length){setStreak(0);return;}
+        const days=new Set(data.map(c=>new Date(c.completed_at).toDateString()));
+        let count=0;
+        const d=new Date();
+        // Check if today has completions, if not start from yesterday
+        if(!days.has(d.toDateString())){
+          d.setDate(d.getDate()-1);
+          if(!days.has(d.toDateString())){setStreak(0);return;}
+        }
+        while(days.has(d.toDateString())){count++;d.setDate(d.getDate()-1);}
+        setStreak(count);
+      });
+  },[user,completedToday]);
   const rmTask=async id=>{await supabase.from("tasks").update({active:false}).eq("id",id);setDel(null);await load();};
   const upTask=async(id,u)=>{const f=u.frequency?FREQ.find(x=>x.v===u.frequency):null;
     const up={...u};if(f)up.frequency_days=f.d;await supabase.from("tasks").update(up).eq("id",id);setEdit(null);await load();};
@@ -320,10 +350,11 @@ export default function App(){
         </div>
         <h1 className="text-3xl font-black text-stone-900 tracking-tight">Today, {user}</h1>
 
-        {/* Progress bar */}
-        {(completedToday.length>0||dailyTasks.length>0)&&<div className="mt-3">
+        {/* Progress bar + streak */}
+        {(completedToday.length>0||dailyTasks.length>0||streak>0)&&<div className="mt-3">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-bold text-stone-400">{completedToday.length} done{dailyTasks.length>0?` / ${completedToday.length+dailyTasks.length} total`:""}</span>
+            {streak>0&&<span className="text-xs font-bold text-amber-500">&#128293; {streak} day streak</span>}
           </div>
           <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-500 rounded-full transition-all duration-500"
@@ -418,6 +449,18 @@ export default function App(){
             );})}
           </div>
         </div>}
+
+        {/* Quick capture */}
+        <div className="mt-6">
+          <div className="flex gap-2">
+            <input value={captureText} onChange={e=>setCaptureText(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&quickCapture()}
+              placeholder="Quick thought... just type and hit enter"
+              className="flex-1 px-4 py-3 rounded-2xl bg-stone-50 border-2 border-stone-100 text-sm font-medium text-stone-800 focus:outline-none focus:border-stone-300 placeholder:text-stone-300 transition-colors"/>
+            {captureText.trim()&&<button onClick={quickCapture}
+              className="px-4 py-3 rounded-2xl bg-stone-900 text-white text-sm font-bold active:scale-95 transition-all">Add</button>}
+          </div>
+        </div>
 
         {/* Category nav */}
         <div className="mt-6 grid grid-cols-3 gap-2.5">
