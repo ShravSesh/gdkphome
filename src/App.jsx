@@ -34,8 +34,9 @@ function fmt(s){return`${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`
 function enrich(t){const st=getStat(t);return{...t,s:st.s,l:st.l,u:st.u};}
 function isDue(t){return["overdue","due","soon"].includes(t.s);}
 
-function selectDaily(tasks){
-  const due=tasks.filter(isDue).sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
+function selectDaily(tasks,user){
+  const mine=tasks.filter(t=>!t.assigned_to||t.assigned_to===user);
+  const due=mine.filter(isDue).sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
   if(!due.length)return[];
   const cats=["home","admin","personal"];
   const picked=[];
@@ -146,7 +147,7 @@ export default function App(){
     if(parsed&&parsed.date===today){
       setDailyIds(parsed.ids.filter(id=>tasks.find(t=>t.id===id)));
     }else{
-      const ids=selectDaily(tasks.map(enrich)).map(t=>t.id);
+      const ids=selectDaily(tasks.map(enrich),user).map(t=>t.id);
       localStorage.setItem(key,JSON.stringify({date:today,ids}));
       setDailyIds(ids);
     }
@@ -155,7 +156,7 @@ export default function App(){
   const saveDailyIds=ids=>{setDailyIds(ids);localStorage.setItem(`hb-daily-${user}`,JSON.stringify({date:new Date().toDateString(),ids}));};
   const shuffleDaily=idx=>{
     const enriched=tasks.map(enrich);
-    const due=enriched.filter(t=>isDue(t)&&!dailyIds.includes(t.id));
+    const due=enriched.filter(t=>isDue(t)&&!dailyIds.includes(t.id)&&(!t.assigned_to||t.assigned_to===user));
     if(!due.length)return;
     const top=due.sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority))).slice(0,5);
     const newIds=[...dailyIds];newIds[idx]=top[Math.floor(Math.random()*top.length)].id;
@@ -179,7 +180,7 @@ export default function App(){
       saveDailyIds(remaining);
       // Momentum: suggest next task if there are more due
       const enriched=tasks.map(enrich);
-      const nextUp=enriched.filter(t=>isDue(t)&&!remaining.includes(t.id)&&t.id!==id)
+      const nextUp=enriched.filter(t=>isDue(t)&&!remaining.includes(t.id)&&t.id!==id&&(!t.assigned_to||t.assigned_to===user))
         .sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
       if(nextUp.length>0)setMomentum(nextUp[0]);
     },3000);
@@ -335,14 +336,14 @@ export default function App(){
   };
 
   // Available tasks to pick from
-  const pickable=tasks.map(enrich).filter(t=>isDue(t)&&!dailyIds.includes(t.id))
+  const pickable=tasks.map(enrich).filter(t=>isDue(t)&&!dailyIds.includes(t.id)&&(!t.assigned_to||t.assigned_to===user))
     .sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
 
   if(timer)return<Timer task={timer} onDone={()=>{complete(timer.id);setTimer(null);}} onCancel={()=>setTimer(null)}/>;
 
   // Quick Pick
   if(qp){
-    const allDue=tasks.map(enrich).filter(isDue).sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
+    const allDue=tasks.map(enrich).filter(t=>isDue(t)&&(!t.assigned_to||t.assigned_to===user)).sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
     return<QuickPick allDue={allDue} onStart={t=>setTimer(t)} onClose={()=>setQp(false)}/>;
   }
 
@@ -387,7 +388,7 @@ export default function App(){
           {edit===t.id?<EditInline task={t} theme={theme} onSave={u=>upTask(t.id,u)} onCancel={()=>setEdit(null)}/>:<>
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-base font-semibold text-stone-800">{t.name}</p>
+                <p className="text-base font-semibold text-stone-800">{t.name}{t.assigned_to?<span className="text-xs font-medium text-stone-300 ml-2">({t.assigned_to} only)</span>:""}</p>
                 <p className="text-sm text-stone-400 mt-0.5">{FREQ.find(f=>f.v===t.frequency)?.l} &middot; {t.estimated_min}m &middot;
                   <span className={t.s==="overdue"?" text-red-600 font-semibold":t.s==="due"?" text-amber-600":" text-emerald-600"}> {t.l}</span></p>
               </div>
@@ -535,7 +536,7 @@ export default function App(){
         {/* Category nav */}
         <div className="mt-6 grid grid-cols-3 gap-2.5">
           {Object.entries(CAT).map(([k,c])=>{
-            const n=tasks.filter(t=>t.category===k).map(enrich).filter(isDue).length;
+            const n=tasks.filter(t=>t.category===k&&(!t.assigned_to||t.assigned_to===user)).map(enrich).filter(isDue).length;
             return<button key={k} onClick={()=>{setCat(k);setView("manage");setAdding(false);}}
               className="rounded-2xl p-4 text-left active:scale-95 transition-all" style={{background:c.light}}>
               <p className="text-sm font-extrabold" style={{color:c.accent}}>{c.icon} {c.label}</p>

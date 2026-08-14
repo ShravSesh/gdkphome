@@ -45,6 +45,45 @@ export default async function handler(req, res) {
     .map(t => t.name);
 
   let title, body;
+  if (type === 'pills-morning') {
+    title = 'Morning pills \u{1F48A}';
+    body = 'Time to take your morning medication!';
+    // Only send to users who have the pills task assigned
+    const pillSubs = [];
+    for (const sub of subs) {
+      const hasPills = tasks.some(t => t.name.toLowerCase().includes('pill') && 
+        (!t.assigned_to || t.assigned_to === sub.user_name));
+      if (hasPills) pillSubs.push(sub);
+    }
+    const payload = JSON.stringify({ title, body });
+    const results = await Promise.allSettled(
+      pillSubs.map(sub => webpush.sendNotification(JSON.parse(sub.subscription), payload))
+    );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'rejected' && results[i].reason?.statusCode === 410)
+        await supabase.from('push_subscriptions').delete().eq('id', pillSubs[i].id);
+    }
+    return res.status(200).json({ sent: results.filter(r => r.status === 'fulfilled').length, type });
+  }
+  if (type === 'pills-evening') {
+    title = 'Evening pills \u{1F48A}';
+    body = 'Time to take your evening medication!';
+    const pillSubs = [];
+    for (const sub of subs) {
+      const hasPills = tasks.some(t => t.name.toLowerCase().includes('pill') && 
+        (!t.assigned_to || t.assigned_to === sub.user_name));
+      if (hasPills) pillSubs.push(sub);
+    }
+    const payload = JSON.stringify({ title, body });
+    const results = await Promise.allSettled(
+      pillSubs.map(sub => webpush.sendNotification(JSON.parse(sub.subscription), payload))
+    );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'rejected' && results[i].reason?.statusCode === 410)
+        await supabase.from('push_subscriptions').delete().eq('id', pillSubs[i].id);
+    }
+    return res.status(200).json({ sent: results.filter(r => r.status === 'fulfilled').length, type });
+  }
   if (type === 'morning') {
     title = 'Good morning! \u2600\uFE0F';
     body = dueCount === 0
