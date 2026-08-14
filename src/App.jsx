@@ -209,11 +209,72 @@ export default function App(){
     setTimer({...pick,estimated_min:5,_originalMin:pick.estimated_min});
   };
 
-  // Quick capture - saves as an inbox task
+  // Smart task parser
+  const parseTask=(text)=>{
+    const lo=text.toLowerCase();
+
+    // Category
+    const hw=['clean','vacuum','mop','dust','laundry','dishes','kitchen','bathroom','bed','trash','fridge','oven','window','plant','water','garden','organiz','declutter','tidy','sweep','scrub','wipe','wash','sheets','toilet','shower','counter','floor','appliance','mirror','garbage','recycl','pantry','closet','garage','gutter','lawn','iron'];
+    const aw=['bill','pay','budget','financ','appointment','doctor','dentist','insurance','tax','mail','package','document','file','renew','cancel','subscri','bank','call','email','schedule','passport','license','registr','invoice','receipt','paper','pharmacy','prescri','grocer','errand','return','refund','booking','reservation'];
+    const pw2=['read','write','exercise','workout','gym','meditat','journal','learn','study','project','hobby','practice','goal','run ','yoga','paint','draw','music','code','course','blog','podcast','book','skill','language','stretch'];
+
+    const hs=hw.filter(w=>lo.includes(w)).length;
+    const as=aw.filter(w=>lo.includes(w)).length;
+    const ps=pw2.filter(w=>lo.includes(w)).length;
+    let category=as>=hs&&as>=ps?"admin":ps>hs&&ps>as?"personal":"home";
+    if(hs===0&&as===0&&ps===0)category="admin";
+
+    // Frequency
+    let frequency="weekly",frequency_days=7;
+    if(/every\s*day|daily|each\s*day|every\s*morning|every\s*night|every\s*evening/i.test(lo)){frequency="daily";frequency_days=1;}
+    else if(/twice\s*(a\s*)?week|2x?\s*(a\s*)?week|two\s*times?\s*(a\s*)?week/i.test(lo)){frequency="twice_weekly";frequency_days=3;}
+    else if(/every\s*(two|2)\s*weeks?|fortnightly|bi[\s-]?weekly|every\s*other\s*week/i.test(lo)){frequency="biweekly";frequency_days=14;}
+    else if(/monthly|every\s*month|once\s*a\s*month/i.test(lo)){frequency="monthly";frequency_days=30;}
+    else if(/quarterly|every\s*(3|three)\s*months?|every\s*quarter/i.test(lo)){frequency="quarterly";frequency_days=90;}
+    else if(/weekly|every\s*week|once\s*a\s*week/i.test(lo)){frequency="weekly";frequency_days=7;}
+
+    // Explicit time mention
+    let estimated_min=null;
+    const timeMatch=lo.match(/(\d+)\s*(?:min|minute|mins|minutes)/);
+    if(timeMatch)estimated_min=parseInt(timeMatch[1]);
+    const hrMatch=lo.match(/(\d+)\s*(?:hr|hour|hours)/);
+    if(hrMatch)estimated_min=(parseInt(hrMatch[1]))*60;
+
+    // Estimate time from task type if not explicit
+    if(!estimated_min){
+      const q=['water','trash','mail','check','sort','wipe','put away','tidy','take out','pick up'];
+      const s=['dust','counter','mirror','plant','iron','fold','make bed','sweep'];
+      const m=['vacuum','mop','laundry','file','budget','organiz','dishes','grocery','errand','workout','exercise','stretch'];
+      const l=['bathroom','deep clean','window','oven','declutter','garage','closet','gutter','lawn'];
+      if(q.some(w=>lo.includes(w)))estimated_min=5;
+      else if(s.some(w=>lo.includes(w)))estimated_min=10;
+      else if(m.some(w=>lo.includes(w)))estimated_min=20;
+      else if(l.some(w=>lo.includes(w)))estimated_min=30;
+      else estimated_min=15;
+    }
+
+    // Priority
+    let priority="medium";
+    if(/urgent|important|asap|critical|must|need to/i.test(lo)||frequency==="daily")priority="high";
+    else if(/whenever|sometime|eventually|low|no rush|when i can/i.test(lo)||frequency==="quarterly")priority="low";
+
+    // Clean task name - remove frequency/time phrases
+    let name=text
+      .replace(/\b(every\s*day|daily|each\s*day|every\s*morning|every\s*night|every\s*evening|twice\s*(a\s*)?week|2x?\s*(a\s*)?week|two\s*times?\s*(a\s*)?week|every\s*(two|2)\s*weeks?|fortnightly|bi[\s-]?weekly|every\s*other\s*week|monthly|every\s*month|once\s*a\s*month|quarterly|every\s*(3|three)\s*months?|every\s*quarter|weekly|every\s*week|once\s*a\s*week)\b/gi,'')
+      .replace(/\b\d+\s*(?:min(?:ute)?s?|hr|hours?)\b/gi,'')
+      .replace(/\b(takes?|about|around|roughly|approximately|urgent|asap|important|no rush|whenever|eventually)\b/gi,'')
+      .replace(/[,\s]+$/,'').replace(/^\s+/,'').replace(/\s{2,}/g,' ').trim();
+    if(name)name=name.charAt(0).toUpperCase()+name.slice(1);
+    else name=text.trim().charAt(0).toUpperCase()+text.trim().slice(1);
+
+    return{name,category,frequency,frequency_days,priority,estimated_min};
+  };
+
+  // Quick capture with smart parsing
   const quickCapture=async()=>{
     if(!captureText.trim())return;
-    await supabase.from("tasks").insert({name:captureText.trim(),category:"admin",frequency:"daily",
-      frequency_days:1,priority:"medium",estimated_min:10});
+    const parsed=parseTask(captureText);
+    await supabase.from("tasks").insert(parsed);
     setCaptureText("");await load();
   };
 
