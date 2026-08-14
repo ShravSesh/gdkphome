@@ -145,12 +145,13 @@ export default function App(){
     const stored=localStorage.getItem(key);
     const parsed=stored?JSON.parse(stored):null;
     if(parsed&&parsed.date===today){
-      setDailyIds(parsed.ids.filter(id=>tasks.find(t=>t.id===id)));
-    }else{
-      const ids=selectDaily(tasks.map(enrich),user).map(t=>t.id);
-      localStorage.setItem(key,JSON.stringify({date:today,ids}));
-      setDailyIds(ids);
+      const valid=parsed.ids.filter(id=>tasks.find(t=>t.id===id));
+      if(valid.length>0){setDailyIds(valid);return;}
     }
+    // Generate fresh daily tasks
+    const ids=selectDaily(tasks.map(enrich),user).map(t=>t.id);
+    localStorage.setItem(key,JSON.stringify({date:today,ids}));
+    setDailyIds(ids);
   },[user,tasks]);
 
   const saveDailyIds=ids=>{setDailyIds(ids);localStorage.setItem(`hb-daily-${user}`,JSON.stringify({date:new Date().toDateString(),ids}));};
