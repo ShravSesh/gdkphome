@@ -216,12 +216,12 @@ export default function App(){
       <div className="sticky top-0 z-20 bg-white border-b border-stone-100 px-5 pt-5 pb-3">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between">
-            <button onClick={()=>{setView("today");setCat(null);}} className="text-sm font-semibold text-stone-400">&#8592; Back</button>
-            <button onClick={()=>setAdding(true)} className="text-sm font-bold" style={{color:theme.accent}}>+ Add</button>
+            <button onClick={()=>{setView("today");setCat(null);}} className="text-base font-semibold text-stone-400">&#8592; Back</button>
+            <button onClick={()=>setAdding(true)} className="text-base font-bold" style={{color:theme.accent}}>+ Add</button>
           </div>
           <div className="flex gap-2 mt-3">
             {Object.entries(CAT).map(([k,c])=><button key={k} onClick={()=>setCat(k)}
-              className="px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+              className="px-4 py-2 rounded-full text-sm font-bold transition-all"
               style={mc===k?{background:c.accent,color:"#fff"}:{background:c.light,color:c.accent}}>{c.icon} {c.label}</button>)}
           </div>
         </div></div>
@@ -232,13 +232,13 @@ export default function App(){
           {edit===t.id?<EditInline task={t} theme={theme} onSave={u=>upTask(t.id,u)} onCancel={()=>setEdit(null)}/>:<>
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-stone-800">{t.name}</p>
-                <p className="text-xs text-stone-400 mt-0.5">{FREQ.find(f=>f.v===t.frequency)?.l} &middot; {t.estimated_min}m &middot;
+                <p className="text-base font-semibold text-stone-800">{t.name}</p>
+                <p className="text-sm text-stone-400 mt-0.5">{FREQ.find(f=>f.v===t.frequency)?.l} &middot; {t.estimated_min}m &middot;
                   <span className={t.s==="overdue"?" text-red-600 font-semibold":t.s==="due"?" text-amber-600":" text-emerald-600"}> {t.l}</span></p>
               </div>
-              <div className="flex gap-2">
-                <button onClick={()=>setEdit(t.id)} className="text-xs text-stone-300 font-medium">Edit</button>
-                <button onClick={()=>setDel(del===t.id?null:t.id)} className="text-xs text-stone-300 font-medium">Del</button>
+              <div className="flex gap-3">
+                <button onClick={()=>setEdit(t.id)} className="text-sm text-stone-300 font-medium">Edit</button>
+                <button onClick={()=>setDel(del===t.id?null:t.id)} className="text-sm text-stone-300 font-medium">Del</button>
               </div>
             </div>
             {del===t.id&&<div className="mt-2 flex items-center gap-3">
@@ -256,20 +256,20 @@ export default function App(){
     <div className="min-h-screen bg-white">
       <div className="max-w-lg mx-auto px-5 pt-6 pb-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">{dateStr}</p>
+        <div className="flex items-center justify-between mb-0.5">
+          <p className="text-sm font-semibold text-stone-400 uppercase tracking-wider">{dateStr}</p>
           <div className="flex gap-2">
-            {notifStatus==="default"&&<button onClick={enableNotifs} className="text-xs font-semibold text-stone-400 active:text-stone-600">&#128276;</button>}
-            <button onClick={()=>setQp(true)} className="text-xs font-bold text-stone-900 bg-stone-100 px-3 py-1 rounded-full active:bg-stone-200">&#9889; Got time?</button>
+            {notifStatus==="default"&&<button onClick={enableNotifs} className="text-sm font-semibold text-stone-400 active:text-stone-600">&#128276;</button>}
+            <button onClick={()=>setQp(true)} className="text-sm font-bold text-stone-900 bg-stone-100 px-4 py-1.5 rounded-full active:bg-stone-200">&#9889; Got time?</button>
           </div>
         </div>
-        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Today, {user}</h1>
+        <h1 className="text-3xl font-black text-stone-900 tracking-tight">Today, {user}</h1>
 
         {/* Daily tasks */}
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 space-y-2.5">
           {dailyTasks.length===0?
-            <div className="py-16 text-center">
-              <p className="text-stone-300 text-sm font-medium">Nothing due. You're clear.</p></div>
+            <div className="py-12 text-center">
+              <p className="text-stone-400 text-base font-medium">Nothing due. You're clear.</p></div>
           :dailyTasks.map((task,idx)=>{
             const c=CAT[task.category]||CAT.home;
             const isCel=celebrating===idx;
@@ -277,19 +277,18 @@ export default function App(){
               {isCel&&<Burst/>}
               <div
                 onClick={()=>!isCel&&handleDailyComplete(idx)}
-                className={`rounded-2xl p-5 transition-all duration-300 cursor-pointer relative overflow-hidden ${isCel?"scale-[1.02]":""}`}
+                className={`rounded-2xl px-6 py-5 transition-all duration-300 cursor-pointer relative overflow-hidden ${isCel?"scale-[1.02]":""}`}
                 style={{background:isCel?"#059669":c.card,transition:"all 0.3s ease"}}>
 
-                {/* Completed state */}
-                {isCel?<div className="flex items-center justify-center py-4">
-                  <span className="text-white text-4xl font-black">&#10003;</span>
+                {isCel?<div className="flex items-center justify-center py-5">
+                  <span className="text-white text-5xl font-black">&#10003;</span>
                 </div>:<>
-                  <p className="text-white/60 text-xs font-semibold mb-2">{c.icon} {c.label} &middot; {task.estimated_min} min</p>
-                  <p className="text-white text-lg font-extrabold leading-snug">{task.name}</p>
-                  <div className="flex items-center gap-3 mt-3" onClick={e=>e.stopPropagation()}>
-                    <button onClick={()=>shuffleDaily(idx)} className="text-white/50 text-xs font-semibold active:text-white/80">&#8634; Shuffle</button>
-                    <button onClick={()=>setTimer(task)} className="text-white/50 text-xs font-semibold active:text-white/80">&#9654; Timer</button>
-                    <button onClick={()=>removeDaily(idx)} className="text-white/30 text-xs font-semibold active:text-white/60">&#10005;</button>
+                  <p className="text-white/60 text-sm font-semibold mb-1.5">{c.icon} {c.label} &middot; {task.estimated_min} min</p>
+                  <p className="text-white text-xl font-extrabold leading-snug">{task.name}</p>
+                  <div className="flex items-center gap-4 mt-3" onClick={e=>e.stopPropagation()}>
+                    <button onClick={()=>shuffleDaily(idx)} className="text-white/50 text-sm font-semibold active:text-white/80">&#8634; Shuffle</button>
+                    <button onClick={()=>setTimer(task)} className="text-white/50 text-sm font-semibold active:text-white/80">&#9654; Timer</button>
+                    <button onClick={()=>removeDaily(idx)} className="text-white/30 text-sm font-semibold active:text-white/60">&#10005;</button>
                   </div>
                 </>}
               </div>
@@ -297,13 +296,13 @@ export default function App(){
         </div>
 
         {/* Category nav */}
-        <div className="mt-8 grid grid-cols-3 gap-2">
+        <div className="mt-6 grid grid-cols-3 gap-2.5">
           {Object.entries(CAT).map(([k,c])=>{
             const n=tasks.filter(t=>t.category===k).map(enrich).filter(isDue).length;
             return<button key={k} onClick={()=>{setCat(k);setView("manage");setAdding(false);}}
-              className="rounded-xl p-3 text-left active:scale-95 transition-all" style={{background:c.light}}>
-              <p className="text-xs font-extrabold" style={{color:c.accent}}>{c.icon} {c.label}</p>
-              <p className="text-[10px] font-medium mt-0.5" style={{color:c.accent,opacity:.6}}>{n>0?`${n} due`:"Clear"}</p>
+              className="rounded-2xl p-4 text-left active:scale-95 transition-all" style={{background:c.light}}>
+              <p className="text-sm font-extrabold" style={{color:c.accent}}>{c.icon} {c.label}</p>
+              <p className="text-xs font-semibold mt-0.5" style={{color:c.accent,opacity:.6}}>{n>0?`${n} due`:"Clear"}</p>
             </button>;})}
         </div>
       </div>
@@ -317,17 +316,17 @@ function QuickPick({allDue,onStart,onClose}){
   return<div className="min-h-screen bg-white">
     <div className="max-w-lg mx-auto px-5 pt-6 pb-8">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-extrabold text-stone-900">&#9889; Got time?</h2>
-        <button onClick={onClose} className="text-sm text-stone-400 font-semibold">Back</button></div>
-      <div className="flex flex-wrap gap-2 mb-6">
-        {SLOTS.map(t=><button key={t} onClick={()=>setMin(t)} className="px-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+        <h2 className="text-2xl font-extrabold text-stone-900">&#9889; Got time?</h2>
+        <button onClick={onClose} className="text-base text-stone-400 font-semibold">Back</button></div>
+      <div className="flex flex-wrap gap-2.5 mb-6">
+        {SLOTS.map(t=><button key={t} onClick={()=>setMin(t)} className="px-5 py-3 rounded-xl text-base font-bold transition-all active:scale-95"
           style={min===t?{background:"#1C1917",color:"#fff"}:{background:"#F5F5F4",color:"#44403C"}}>{t}m</button>)}
       </div>
-      {min&&!avail.length&&<p className="text-center text-stone-300 text-sm py-10">Nothing due that fits.</p>}
+      {min&&!avail.length&&<p className="text-center text-stone-400 text-base py-10">Nothing due that fits.</p>}
       {avail.map((t,i)=>{const c=CAT[t.category]||CAT.home;return<button key={t.id} onClick={()=>onStart(t)}
-        className="w-full mb-3 text-left rounded-2xl p-5 active:scale-[0.97] transition-all" style={{background:c.card}}>
-        <p className="text-white/60 text-xs font-semibold mb-1">{c.icon} {c.label} &middot; {t.estimated_min} min</p>
-        <p className="text-white text-lg font-extrabold">{t.name}</p>
+        className="w-full mb-3 text-left rounded-2xl px-6 py-5 active:scale-[0.97] transition-all" style={{background:c.card}}>
+        <p className="text-white/60 text-sm font-semibold mb-1">{c.icon} {c.label} &middot; {t.estimated_min} min</p>
+        <p className="text-white text-xl font-extrabold">{t.name}</p>
       </button>;})}
     </div></div>;
 }
