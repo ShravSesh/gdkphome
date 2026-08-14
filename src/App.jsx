@@ -258,24 +258,33 @@ export default function App(){
     if(/urgent|important|asap|critical|must|need to/i.test(lo)||frequency==="daily")priority="high";
     else if(/whenever|sometime|eventually|low|no rush|when i can/i.test(lo)||frequency==="quarterly")priority="low";
 
-    // Clean task name - remove frequency/time phrases
+    // Detect "today" - should assign to today's list
+    const isToday=/\btoday\b|right now|this morning|this evening|this afternoon|tonight/i.test(lo);
+
+    // Clean task name - remove frequency/time phrases and "today"
     let name=text
       .replace(/\b(every\s*day|daily|each\s*day|every\s*morning|every\s*night|every\s*evening|twice\s*(a\s*)?week|2x?\s*(a\s*)?week|two\s*times?\s*(a\s*)?week|every\s*(two|2)\s*weeks?|fortnightly|bi[\s-]?weekly|every\s*other\s*week|monthly|every\s*month|once\s*a\s*month|quarterly|every\s*(3|three)\s*months?|every\s*quarter|weekly|every\s*week|once\s*a\s*week)\b/gi,'')
       .replace(/\b\d+\s*(?:min(?:ute)?s?|hr|hours?)\b/gi,'')
-      .replace(/\b(takes?|about|around|roughly|approximately|urgent|asap|important|no rush|whenever|eventually)\b/gi,'')
+      .replace(/\b(takes?|about|around|roughly|approximately|urgent|asap|important|no rush|whenever|eventually|today|right now|this morning|this evening|this afternoon|tonight)\b/gi,'')
       .replace(/[,\s]+$/,'').replace(/^\s+/,'').replace(/\s{2,}/g,' ').trim();
     if(name)name=name.charAt(0).toUpperCase()+name.slice(1);
     else name=text.trim().charAt(0).toUpperCase()+text.trim().slice(1);
 
-    return{name,category,frequency,frequency_days,priority,estimated_min};
+    return{name,category,frequency,frequency_days,priority,estimated_min,isToday};
   };
 
   // Quick capture with smart parsing
   const quickCapture=async()=>{
     if(!captureText.trim())return;
     const parsed=parseTask(captureText);
-    await supabase.from("tasks").insert(parsed);
-    setCaptureText("");await load();
+    const{isToday,...taskData}=parsed;
+    const{data}=await supabase.from("tasks").insert(taskData).select();
+    setCaptureText("");
+    await load();
+    // If "today" was mentioned, add to daily list
+    if(isToday&&data&&data[0]){
+      saveDailyIds([...dailyIds,data[0].id]);
+    }
   };
 
   // Streak calculation
