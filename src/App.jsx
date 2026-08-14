@@ -114,7 +114,7 @@ export default function App(){
   const[timer,setTimer]=useState(null);
   const[qp,setQp]=useState(false);
   const[adding,setAdding]=useState(false);
-  const[nw,setNw]=useState({name:"",frequency:"weekly",priority:"medium",estimated_min:15,category:"home"});
+  const[nw,setNw]=useState({name:"",frequency:"weekly",priority:"medium",estimated_min:15,category:"home",assigned_to:null});
   const[edit,setEdit]=useState(null);
   const[del,setDel]=useState(null);
   const[celebrating,setCelebrating]=useState(null);
@@ -125,6 +125,17 @@ export default function App(){
   const[momentum,setMomentum]=useState(null);
   const[captureText,setCaptureText]=useState("");
   const[streak,setStreak]=useState(0);
+  const[knownUsers,setKnownUsers]=useState([]);
+
+  // Discover all users who have signed in
+  useEffect(()=>{
+    supabase.from("push_subscriptions").select("user_name").then(({data})=>{
+      if(data){
+        const names=[...new Set(data.map(d=>d.user_name))].filter(Boolean);
+        setKnownUsers(names);
+      }
+    });
+  },[]);
 
   const enableNotifs=async()=>{const s=await setupNotifications(user);setNotifStatus(s);};
   const load=useCallback(async()=>{
@@ -313,9 +324,11 @@ export default function App(){
     const up={...u};if(f)up.frequency_days=f.d;await supabase.from("tasks").update(up).eq("id",id);setEdit(null);await load();};
   const addTask=async()=>{
     if(!nw.name.trim())return;const f=FREQ.find(x=>x.v===nw.frequency);
-    await supabase.from("tasks").insert({name:nw.name.trim(),category:nw.category||cat||"home",frequency:nw.frequency,
-      frequency_days:f.d,priority:nw.priority,estimated_min:nw.estimated_min});
-    setNw({name:"",frequency:"weekly",priority:"medium",estimated_min:15,category:cat||"home"});setAdding(false);await load();};
+    const ins={name:nw.name.trim(),category:nw.category||cat||"home",frequency:nw.frequency,
+      frequency_days:f.d,priority:nw.priority,estimated_min:nw.estimated_min};
+    if(nw.assigned_to)ins.assigned_to=nw.assigned_to;
+    await supabase.from("tasks").insert(ins);
+    setNw({name:"",frequency:"weekly",priority:"medium",estimated_min:15,category:cat||"home",assigned_to:null});setAdding(false);await load();};
 
   const now=new Date();
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
@@ -383,10 +396,10 @@ export default function App(){
           </div>
         </div></div>
       <div className="px-5 max-w-lg mx-auto mt-4 space-y-2">
-        {adding&&<AddForm nw={nw} setNw={setNw} theme={theme} onAdd={addTask} onCancel={()=>setAdding(false)}/>}
+        {adding&&<AddForm nw={nw} setNw={setNw} theme={theme} onAdd={addTask} onCancel={()=>setAdding(false)} user={user} knownUsers={knownUsers}/>}
         {all.length===0&&!adding&&<p className="text-center text-stone-300 text-sm py-10">No tasks. Tap + Add.</p>}
         {all.map(t=><div key={t.id} className="py-3 border-b border-stone-100">
-          {edit===t.id?<EditInline task={t} theme={theme} onSave={u=>upTask(t.id,u)} onCancel={()=>setEdit(null)}/>:<>
+          {edit===t.id?<EditInline task={t} theme={theme} onSave={u=>upTask(t.id,u)} onCancel={()=>setEdit(null)} user={user} knownUsers={knownUsers}/>:<>
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <p className="text-base font-semibold text-stone-800">{t.name}{t.assigned_to?<span className="text-xs font-medium text-stone-300 ml-2">({t.assigned_to} only)</span>:""}</p>
@@ -570,10 +583,15 @@ function QuickPick({allDue,onStart,onClose}){
     </div></div>;
 }
 
-function AddForm({nw,setNw,theme,onAdd,onCancel}){
+function AddForm({nw,setNw,theme,onAdd,onCancel,user,knownUsers}){
+  const assignOpts=[{v:null,l:"Both"},{v:user,l:"Just me"},...knownUsers.filter(n=>n!==user).map(n=>({v:n,l:n+" only"}))];
   return<div className="bg-white rounded-2xl border-2 border-stone-100 p-5 mb-4">
     <input value={nw.name} onChange={e=>setNw({...nw,name:e.target.value})} placeholder="Task name" autoFocus
       className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 text-sm font-semibold mb-3 focus:outline-none focus:border-stone-900"/>
+    <p className="text-xs font-semibold text-stone-400 mb-1.5">Who?</p>
+    <div className="flex flex-wrap gap-1.5 mb-3">{assignOpts.map(a=>
+      <button key={a.l} onClick={()=>setNw({...nw,assigned_to:a.v})} className="px-3 py-1.5 rounded-full text-xs font-bold"
+        style={nw.assigned_to===a.v?{background:theme.accent,color:"#fff"}:{background:"#F5F5F4",color:"#78716C"}}>{a.l}</button>)}</div>
     <p className="text-xs font-semibold text-stone-400 mb-1.5">Time</p>
     <div className="flex flex-wrap gap-1.5 mb-3">{[5,10,15,20,30,45].map(m=>
       <button key={m} onClick={()=>setNw({...nw,estimated_min:m})} className="px-3 py-1.5 rounded-full text-xs font-bold"
@@ -593,19 +611,24 @@ function AddForm({nw,setNw,theme,onAdd,onCancel}){
   </div>;
 }
 
-function EditInline({task,theme,onSave,onCancel}){
+function EditInline({task,theme,onSave,onCancel,user,knownUsers}){
   const[n,setN]=useState(task.name);const[f,setF]=useState(task.frequency);
   const[p,setP]=useState(task.priority);const[e,setE]=useState(task.estimated_min);
+  const[a,setA]=useState(task.assigned_to||null);
+  const assignOpts=[{v:null,l:"Both"},{v:user,l:"Just me"},...(knownUsers||[]).filter(x=>x!==user).map(x=>({v:x,l:x+" only"}))];
   return<div className="space-y-3 py-2">
     <input value={n} onChange={ev=>setN(ev.target.value)} className="w-full px-4 py-2.5 rounded-xl border-2 border-stone-200 text-sm font-semibold focus:outline-none focus:border-stone-900"/>
     <div className="flex items-center gap-2"><span className="text-xs text-stone-400 font-semibold">Time:</span>
       <input type="number" value={e} onChange={ev=>setE(parseInt(ev.target.value)||1)} className="w-14 px-2 py-1.5 rounded-lg border-2 border-stone-200 text-sm font-bold focus:outline-none text-center"/><span className="text-xs text-stone-400">min</span></div>
+    <div className="flex flex-wrap gap-1.5">{assignOpts.map(o=>
+      <button key={o.l} onClick={()=>setA(o.v)} className="px-2.5 py-1 rounded-full text-xs font-bold"
+        style={a===o.v?{background:theme.accent,color:"#fff"}:{background:"#F5F5F4",color:"#78716C"}}>{o.l}</button>)}</div>
     <div className="flex flex-wrap gap-1.5">{FREQ.map(x=>
       <button key={x.v} onClick={()=>setF(x.v)} className="px-2.5 py-1 rounded-full text-xs font-bold"
         style={f===x.v?{background:theme.accent,color:"#fff"}:{background:"#F5F5F4",color:"#78716C"}}>{x.l}</button>)}</div>
     <div className="flex gap-1.5">{PRIS.map(x=>
       <button key={x} onClick={()=>setP(x)} className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${p===x?PRI_C[x].p:"bg-stone-100 text-stone-400"}`}>{x}</button>)}</div>
     <div className="flex gap-2"><button onClick={onCancel} className="text-xs px-4 py-2 rounded-xl border-2 border-stone-200 text-stone-400 font-semibold">Cancel</button>
-      <button onClick={()=>onSave({name:n,frequency:f,priority:p,estimated_min:e})} className="text-xs px-4 py-2 rounded-xl text-white font-bold" style={{background:theme.accent}}>Save</button></div>
+      <button onClick={()=>onSave({name:n,frequency:f,priority:p,estimated_min:e,assigned_to:a})} className="text-xs px-4 py-2 rounded-xl text-white font-bold" style={{background:theme.accent}}>Save</button></div>
   </div>;
 }
