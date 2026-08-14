@@ -3,6 +3,7 @@ import { supabase } from "./supabase.js";
 import { setupNotifications, notifyCompletion, getNotificationStatus } from "./notifications.js";
 
 const FREQ=[
+  {v:"once",l:"One-time",d:0},
   {v:"daily",l:"Daily",d:1},{v:"twice_weekly",l:"2x/week",d:3},
   {v:"weekly",l:"Weekly",d:7},{v:"biweekly",l:"Every 2 weeks",d:14},
   {v:"monthly",l:"Monthly",d:30},{v:"quarterly",l:"Quarterly",d:90},
@@ -24,6 +25,7 @@ const PRI_C={high:{b:"#DC2626",p:"bg-red-50 text-red-700"},medium:{b:"#D97706",p
 
 function getStat(t){
   if(!t.last_completed)return{s:"due",l:"Not done yet",u:100};
+  if(t.frequency_days===0)return{s:"ok",l:"Done",u:-1};
   const e=Math.floor((Date.now()-new Date(t.last_completed))/864e5),r=t.frequency_days-e;
   if(r<=0)return{s:"overdue",l:`${Math.abs(r)}d overdue`,u:200+Math.abs(r)};
   if(r<=Math.max(1,t.frequency_days*.25))return{s:"soon",l:`Due in ${r}d`,u:50};
@@ -349,8 +351,9 @@ export default function App(){
     setPicking(false);
   };
 
-  // Available tasks to pick from
-  const pickable=tasks.map(enrich).filter(t=>isDue(t)&&!dailyIds.includes(t.id)&&(!t.assigned_to||t.assigned_to===user))
+  // Available tasks to pick from (exclude already completed today)
+  const completedTodayIds=new Set(completedToday.map(c=>c.task_id));
+  const pickable=tasks.map(enrich).filter(t=>isDue(t)&&!dailyIds.includes(t.id)&&!completedTodayIds.has(t.id)&&(!t.assigned_to||t.assigned_to===user))
     .sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
 
   if(timer)return<Timer task={timer} onDone={()=>{complete(timer.id);setTimer(null);}} onCancel={()=>setTimer(null)}/>;
@@ -423,8 +426,8 @@ export default function App(){
 
   // TODAY VIEW
   return(
-    <div className="min-h-screen bg-white">
-      <div className="max-w-lg mx-auto px-5 pt-6 pb-8">
+    <div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
+      <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-0.5">
           <p className="text-sm font-semibold text-stone-400 uppercase tracking-wider">{dateStr}</p>
