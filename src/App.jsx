@@ -121,6 +121,7 @@ export default function App(){
   const[notifStatus,setNotifStatus]=useState(()=>getNotificationStatus());
   const[picking,setPicking]=useState(false);
   const[completedToday,setCompletedToday]=useState([]);
+  const[momentum,setMomentum]=useState(null); // task to suggest after completing
 
   const enableNotifs=async()=>{const s=await setupNotifications(user);setNotifStatus(s);};
   const load=useCallback(async()=>{
@@ -170,7 +171,40 @@ export default function App(){
   const handleDailyComplete=idx=>{
     const id=dailyIds[idx];if(!id)return;
     setCelebrating(idx);complete(id);
-    setTimeout(()=>{setCelebrating(null);saveDailyIds(dailyIds.filter((_,i)=>i!==idx));},3000);
+    setTimeout(()=>{
+      setCelebrating(null);
+      const remaining=dailyIds.filter((_,i)=>i!==idx);
+      saveDailyIds(remaining);
+      // Momentum: suggest next task if there are more due
+      const enriched=tasks.map(enrich);
+      const nextUp=enriched.filter(t=>isDue(t)&&!remaining.includes(t.id)&&t.id!==id)
+        .sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
+      if(nextUp.length>0)setMomentum(nextUp[0]);
+    },3000);
+  };
+
+  // Undo a completion
+  const undoComplete=async(completionId,taskId)=>{
+    await supabase.from("completions").delete().eq("id",completionId);
+    // Find previous completion for this task
+    const{data:prev}=await supabase.from("completions").select("*").eq("task_id",taskId).order("completed_at",{ascending:false}).limit(1);
+    if(prev&&prev.length>0){
+      await supabase.from("tasks").update({last_completed:prev[0].completed_at,last_completed_by:prev[0].completed_by}).eq("id",taskId);
+    }else{
+      await supabase.from("tasks").update({last_completed:null,last_completed_by:null}).eq("id",taskId);
+    }
+    // Add back to daily
+    if(!dailyIds.includes(taskId))saveDailyIds([...dailyIds,taskId]);
+    await load();
+  };
+
+  // Just 5 minutes
+  const justFiveMin=()=>{
+    const enriched=tasks.map(enrich);
+    const pool=dailyTasks.length>0?dailyTasks:enriched.filter(isDue).sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
+    if(!pool.length)return;
+    const pick=pool[0];
+    setTimer({...pick,estimated_min:5,_originalMin:pick.estimated_min});
   };
   const rmTask=async id=>{await supabase.from("tasks").update({active:false}).eq("id",id);setDel(null);await load();};
   const upTask=async(id,u)=>{const f=u.frequency?FREQ.find(x=>x.v===u.frequency):null;
@@ -286,6 +320,36 @@ export default function App(){
         </div>
         <h1 className="text-3xl font-black text-stone-900 tracking-tight">Today, {user}</h1>
 
+        {/* Progress bar */}
+        {(completedToday.length>0||dailyTasks.length>0)&&<div className="mt-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-stone-400">{completedToday.length} done{dailyTasks.length>0?` / ${completedToday.length+dailyTasks.length} total`:""}</span>
+          </div>
+          <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+              style={{width:`${completedToday.length+dailyTasks.length>0?Math.round(completedToday.length/(completedToday.length+dailyTasks.length)*100):0}%`}}/>
+          </div>
+        </div>}
+
+        {/* Just 5 minutes */}
+        {dailyTasks.length>0&&<button onClick={justFiveMin}
+          className="w-full mt-4 py-3.5 rounded-2xl bg-stone-900 text-white text-base font-extrabold active:scale-[0.98] transition-all">
+          Just 5 minutes &#9889;
+        </button>}
+
+        {/* Momentum prompt */}
+        {momentum&&<div className="mt-4 rounded-2xl bg-emerald-50 border-2 border-emerald-100 p-5">
+          <p className="text-sm font-bold text-emerald-800 mb-1">Nice work! Keep going?</p>
+          <p className="text-base font-extrabold text-emerald-900">{momentum.name}</p>
+          <p className="text-xs text-emerald-600 mt-1">{CAT[momentum.category]?.icon} {CAT[momentum.category]?.label} &middot; {momentum.estimated_min}m</p>
+          <div className="flex gap-2 mt-3">
+            <button onClick={()=>{addToDaily(momentum.id);setTimer(momentum);setMomentum(null);}}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold active:scale-95">Go &#9654;</button>
+            <button onClick={()=>setMomentum(null)}
+              className="flex-1 py-2.5 rounded-xl border-2 border-emerald-200 text-sm font-bold text-emerald-700 active:bg-emerald-100">Done for now</button>
+          </div>
+        </div>}
+
         {/* Daily tasks */}
         <div className="mt-4 space-y-2.5">
           {dailyTasks.length===0&&!picking?
@@ -349,7 +413,7 @@ export default function App(){
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-stone-500">{c.tasks?.name||"Task"}</p>
                 </div>
-                <span className="text-xs text-stone-300 font-medium">{c.completed_by} &middot; {new Date(c.completed_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span>
+                <button onClick={()=>undoComplete(c.id,c.task_id)} className="text-xs text-stone-300 font-semibold active:text-stone-500">Undo</button>
               </div>
             );})}
           </div>
