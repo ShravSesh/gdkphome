@@ -129,6 +129,8 @@ export default function App(){
   const[momentum,setMomentum]=useState(null);
   const[captureText,setCaptureText]=useState("");
   const[streak,setStreak]=useState(0);
+  const[shopItems,setShopItems]=useState([]);
+  const[shopInput,setShopInput]=useState("");
   const[knownUsers,setKnownUsers]=useState([]);
 
   // Discover all users who have signed in
@@ -147,10 +149,20 @@ export default function App(){
     if(data)setTasks(data);setLoading(false);
   },[]);
   useEffect(()=>{load();},[load]);
+
+  const loadShop=useCallback(async()=>{
+    const{data}=await supabase.from("shopping_items").select("*").order("completed").order("created_at",{ascending:false});
+    if(data)setShopItems(data);
+  },[]);
+  useEffect(()=>{loadShop();},[loadShop]);
+
   useEffect(()=>{
-    const ch=supabase.channel("rt").on("postgres_changes",{event:"*",schema:"public",table:"tasks"},()=>load()).subscribe();
+    const ch=supabase.channel("rt")
+      .on("postgres_changes",{event:"*",schema:"public",table:"tasks"},()=>load())
+      .on("postgres_changes",{event:"*",schema:"public",table:"shopping_items"},()=>loadShop())
+      .subscribe();
     return()=>{supabase.removeChannel(ch);};
-  },[load]);
+  },[load,loadShop]);
 
   // Daily assignments
   useEffect(()=>{
@@ -304,6 +316,53 @@ export default function App(){
     }
   };
 
+  // Shopping list functions
+  const addShopItem=async()=>{
+    if(!shopInput.trim())return;
+    await supabase.from("shopping_items").insert({name:shopInput.trim(),added_by:user});
+    setShopInput("");await loadShop();
+  };
+  const toggleShopItem=async(id,completed)=>{
+    await supabase.from("shopping_items").update({
+      completed:!completed,completed_by:!completed?user:null,
+      completed_at:!completed?new Date().toISOString():null
+    }).eq("id",id);
+    await loadShop();
+  };
+  const removeShopItem=async(id)=>{
+    await supabase.from("shopping_items").delete().eq("id",id);
+    await loadShop();
+  };
+  const clearCompletedShop=async()=>{
+    await supabase.from("shopping_items").delete().eq("completed",true);
+    await loadShop();
+  };
+
+  // Task stats calculator (ignores first cycle)
+  const getTaskStats=(task)=>{
+    const history=(task.history||[]).length>0?task.history:
+      completedToday.filter(c=>c.task_id===task.id).map(c=>({date:c.completed_at,by:c.completed_by}));
+    // Need at least 2 completions to calculate stats (first one establishes baseline)
+    if(!task.completions_data||task.completions_data.length<2)return null;
+    const sorted=task.completions_data.sort((a,b)=>new Date(a)-new Date(b));
+    const gaps=[];
+    for(let i=1;i<sorted.length;i++){
+      const d1=new Date(sorted[i-1]);d1.setHours(0,0,0,0);
+      const d2=new Date(sorted[i]);d2.setHours(0,0,0,0);
+      gaps.push(Math.round((d2-d1)/864e5));
+    }
+    if(!gaps.length)return null;
+    const avg=Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
+    const target=task.frequency_days;
+    if(target===0)return{status:"done",label:"Completed"};
+    const diff=avg-target;
+    return{
+      avg,target,completions:sorted.length,
+      status:diff<=1?"on-track":diff<=target*0.5?"slightly-late":"often-late",
+      label:diff<=1?`On track (avg ${avg}d)`:diff<=target*0.5?`Slightly late (avg ${avg}d vs ${target}d)`:`Often late (avg ${avg}d vs ${target}d)`
+    };
+  };
+
   // Streak calculation
   useEffect(()=>{
     if(!user)return;
@@ -423,6 +482,118 @@ export default function App(){
             </div>}
           </>}
         </div>)}
+      </div></div>;
+  }
+
+  // SHOPPING LIST VIEW
+  if(view==="shop"){
+    const pending=shopItems.filter(s=>!s.completed);
+    const done=shopItems.filter(s=>s.completed);
+    return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
+      <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={()=>setView("today")} className="text-base font-semibold text-stone-400">&#8592; Back</button>
+          {done.length>0&&<button onClick={clearCompletedShop} className="text-sm font-semibold text-stone-300">Clear done</button>}
+        </div>
+        <h1 className="text-2xl font-black text-stone-900 mb-4">&#128722; Shopping List</h1>
+        <div className="flex gap-2 mb-4">
+          <input value={shopInput} onChange={e=>setShopInput(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&addShopItem()}
+            placeholder="Add an item..."
+            className="flex-1 px-4 py-3 rounded-2xl bg-stone-50 border-2 border-stone-100 text-sm font-medium text-stone-800 focus:outline-none focus:border-stone-300 placeholder:text-stone-300"/>
+          {shopInput.trim()&&<button onClick={addShopItem}
+            className="px-4 py-3 rounded-2xl bg-stone-900 text-white text-sm font-bold active:scale-95">Add</button>}
+        </div>
+        {pending.length===0&&done.length===0&&<p className="text-center text-stone-300 text-sm py-10">List is empty. Add some items.</p>}
+        <div className="space-y-1">
+          {pending.map(item=>(
+            <div key={item.id} className="flex items-center gap-3 px-4 py-3 rounded-xl active:bg-stone-50 transition-colors">
+              <button onClick={()=>toggleShopItem(item.id,item.completed)}
+                className="w-6 h-6 rounded-full border-2 border-stone-300 flex-shrink-0 active:scale-90 transition-all"/>
+              <span className="text-base font-medium text-stone-800 flex-1">{item.name}</span>
+              <button onClick={()=>removeShopItem(item.id)} className="text-stone-200 text-sm active:text-stone-400">&#10005;</button>
+            </div>
+          ))}
+        </div>
+        {done.length>0&&<div className="mt-4 pt-3 border-t border-stone-100">
+          <p className="text-xs font-bold text-stone-300 uppercase tracking-wider mb-2">Got it</p>
+          {done.map(item=>(
+            <div key={item.id} className="flex items-center gap-3 px-4 py-2 rounded-xl">
+              <button onClick={()=>toggleShopItem(item.id,item.completed)}
+                className="w-6 h-6 rounded-full bg-emerald-500 flex-shrink-0 flex items-center justify-center active:scale-90">
+                <span className="text-white text-xs font-bold">&#10003;</span></button>
+              <span className="text-sm text-stone-400 line-through flex-1">{item.name}</span>
+              <span className="text-xs text-stone-300">{item.completed_by}</span>
+            </div>
+          ))}
+        </div>}
+      </div></div>;
+  }
+
+  // STATS VIEW
+  if(view==="stats"){
+    const[statsData,setStatsData]=useState(null);
+    useEffect(()=>{
+      supabase.from("completions").select("task_id,completed_at").order("completed_at")
+        .then(({data})=>{
+          if(!data)return;
+          const byTask={};
+          data.forEach(c=>{
+            if(!byTask[c.task_id])byTask[c.task_id]=[];
+            byTask[c.task_id].push(c.completed_at);
+          });
+          setStatsData(byTask);
+        });
+    },[]);
+    const allTasks=tasks.map(enrich).filter(t=>(!t.assigned_to||t.assigned_to===user));
+    return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
+      <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={()=>setView("today")} className="text-base font-semibold text-stone-400">&#8592; Back</button>
+        </div>
+        <h1 className="text-2xl font-black text-stone-900 mb-1">&#128202; Task Stats</h1>
+        <p className="text-sm text-stone-400 mb-4">Based on your completion history (first cycle excluded)</p>
+        {!statsData?<p className="text-center text-stone-300 text-sm py-10">Loading...</p>:
+        <div className="space-y-2">
+          {allTasks.filter(t=>t.frequency_days>0).map(t=>{
+            const completions=statsData[t.id]||[];
+            if(completions.length<2)return(
+              <div key={t.id} className="py-3 border-b border-stone-100">
+                <p className="text-sm font-semibold text-stone-800">{t.name}</p>
+                <p className="text-xs text-stone-300 mt-0.5">{completions.length===0?"No data yet":"Needs more completions for stats"}</p>
+              </div>
+            );
+            const sorted=[...completions].sort((a,b)=>new Date(a)-new Date(b));
+            const gaps=[];
+            for(let i=1;i<sorted.length;i++){
+              const d1=new Date(sorted[i-1]);d1.setHours(0,0,0,0);
+              const d2=new Date(sorted[i]);d2.setHours(0,0,0,0);
+              gaps.push(Math.round((d2-d1)/864e5));
+            }
+            const avg=Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length);
+            const target=t.frequency_days;
+            const diff=avg-target;
+            const status=diff<=1?"on-track":diff<=target*0.5?"slightly-late":"often-late";
+            const colors={
+              "on-track":{bg:"bg-emerald-50",text:"text-emerald-700",dot:"bg-emerald-500"},
+              "slightly-late":{bg:"bg-amber-50",text:"text-amber-700",dot:"bg-amber-500"},
+              "often-late":{bg:"bg-red-50",text:"text-red-700",dot:"bg-red-500"},
+            };
+            const c=colors[status];
+            return(
+              <div key={t.id} className={`py-3 px-4 rounded-xl ${c.bg} border-b border-stone-100`}>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-stone-800">{t.name}</p>
+                  <div className={`w-2 h-2 rounded-full ${c.dot}`}/>
+                </div>
+                <p className={`text-xs font-semibold mt-1 ${c.text}`}>
+                  {status==="on-track"?`On track`:status==="slightly-late"?"Slightly late":"Often late"}
+                  {" \u00B7 "}avg {avg}d vs target {target}d {" \u00B7 "}{sorted.length} completions
+                </p>
+              </div>
+            );
+          })}
+        </div>}
       </div></div>;
   }
 
@@ -553,7 +724,19 @@ export default function App(){
         </div>
 
         {/* Category nav */}
-        <div className="mt-6 grid grid-cols-3 gap-2.5">
+        <div className="mt-6 grid grid-cols-2 gap-2.5">
+          <button onClick={()=>setView("shop")}
+            className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-amber-50">
+            <p className="text-sm font-extrabold text-amber-700">&#128722; Shopping List</p>
+            <p className="text-xs font-semibold text-amber-500 mt-0.5">{shopItems.filter(s=>!s.completed).length} items</p>
+          </button>
+          <button onClick={()=>setView("stats")}
+            className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-stone-100">
+            <p className="text-sm font-extrabold text-stone-700">&#128202; Task Stats</p>
+            <p className="text-xs font-semibold text-stone-400 mt-0.5">How you're doing</p>
+          </button>
+        </div>
+        <div className="mt-2.5 grid grid-cols-3 gap-2.5">
           {Object.entries(CAT).map(([k,c])=>{
             const n=tasks.filter(t=>t.category===k&&(!t.assigned_to||t.assigned_to===user)).map(enrich).filter(isDue).length;
             return<button key={k} onClick={()=>{setCat(k);setView("manage");setAdding(false);}}
