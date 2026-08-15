@@ -26,7 +26,9 @@ const PRI_C={high:{b:"#DC2626",p:"bg-red-50 text-red-700"},medium:{b:"#D97706",p
 function getStat(t){
   if(!t.last_completed)return{s:"due",l:"Not done yet",u:100};
   if(t.frequency_days===0)return{s:"ok",l:"Done",u:-1};
-  const e=Math.floor((Date.now()-new Date(t.last_completed))/864e5),r=t.frequency_days-e;
+  const last=new Date(t.last_completed);const today=new Date();
+  last.setHours(0,0,0,0);today.setHours(0,0,0,0);
+  const e=Math.round((today-last)/864e5),r=t.frequency_days-e;
   if(r<=0)return{s:"overdue",l:`${Math.abs(r)}d overdue`,u:200+Math.abs(r)};
   if(r<=Math.max(1,t.frequency_days*.25))return{s:"soon",l:`Due in ${r}d`,u:50};
   return{s:"ok",l:`${r}d left`,u:0};

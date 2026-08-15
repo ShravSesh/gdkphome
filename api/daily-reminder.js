@@ -25,11 +25,13 @@ export default async function handler(req, res) {
   const { data: tasks } = await supabase.from('tasks').select('*').eq('active', true);
   if (!tasks) return res.status(500).json({ error: 'Failed to load tasks' });
 
-  // Find due tasks
-  const now = Date.now();
+  // Find due tasks (calendar day based)
+  const today = new Date(); today.setHours(0,0,0,0);
   const dueTasks = tasks.filter(t => {
     if (!t.last_completed) return true;
-    const elapsed = Math.floor((now - new Date(t.last_completed)) / 86400000);
+    if (t.frequency_days === 0) return false;
+    const last = new Date(t.last_completed); last.setHours(0,0,0,0);
+    const elapsed = Math.round((today - last) / 86400000);
     return elapsed >= t.frequency_days;
   });
 
