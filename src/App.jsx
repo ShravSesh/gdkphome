@@ -131,6 +131,7 @@ export default function App(){
   const[streak,setStreak]=useState(0);
   const[shopItems,setShopItems]=useState([]);
   const[shopInput,setShopInput]=useState("");
+  const[meals,setMeals]=useState([]);
   const[knownUsers,setKnownUsers]=useState([]);
 
   // Discover all users who have signed in
@@ -156,13 +157,26 @@ export default function App(){
   },[]);
   useEffect(()=>{loadShop();},[loadShop]);
 
+  const loadMeals=useCallback(async()=>{
+    const today=new Date();today.setHours(0,0,0,0);
+    const start=new Date(today);start.setDate(start.getDate()-start.getDay()+1); // Monday
+    const end=new Date(start);end.setDate(end.getDate()+13); // 2 weeks out
+    const{data}=await supabase.from("meals").select("*")
+      .gte("date",start.toISOString().split("T")[0])
+      .lte("date",end.toISOString().split("T")[0])
+      .order("date").order("label");
+    if(data)setMeals(data);
+  },[]);
+  useEffect(()=>{loadMeals();},[loadMeals]);
+
   useEffect(()=>{
     const ch=supabase.channel("rt")
       .on("postgres_changes",{event:"*",schema:"public",table:"tasks"},()=>load())
       .on("postgres_changes",{event:"*",schema:"public",table:"shopping_items"},()=>loadShop())
+      .on("postgres_changes",{event:"*",schema:"public",table:"meals"},()=>loadMeals())
       .subscribe();
     return()=>{supabase.removeChannel(ch);};
-  },[load,loadShop]);
+  },[load,loadShop,loadMeals]);
 
   // Daily assignments
   useEffect(()=>{
@@ -336,6 +350,35 @@ export default function App(){
   const clearCompletedShop=async()=>{
     await supabase.from("shopping_items").delete().eq("completed",true);
     await loadShop();
+  };
+
+  // Meal planner functions
+  const addMeal=async(date,label,name)=>{
+    if(!name.trim())return;
+    await supabase.from("meals").insert({date,label,name:name.trim(),added_by:user});
+    await loadMeals();
+  };
+  const removeMeal=async(id)=>{
+    await supabase.from("meals").delete().eq("id",id);
+    await loadMeals();
+  };
+  const getMealsForDate=(date)=>meals.filter(m=>m.date===date);
+
+  // Calendar helper: get tasks due on a specific date
+  const getTasksDueOn=(dateObj)=>{
+    const myTasks=tasks.filter(t=>(!t.assigned_to||t.assigned_to===user)&&t.frequency_days>0);
+    return myTasks.map(enrich).filter(t=>{
+      if(!t.last_completed){
+        // Never completed = due today or earlier
+        const created=new Date(t.created_at);created.setHours(0,0,0,0);
+        const target=new Date(dateObj);target.setHours(0,0,0,0);
+        return target>=created;
+      }
+      const last=new Date(t.last_completed);last.setHours(0,0,0,0);
+      const nextDue=new Date(last);nextDue.setDate(nextDue.getDate()+t.frequency_days);
+      const check=new Date(dateObj);check.setHours(0,0,0,0);
+      return check.toDateString()===nextDue.toDateString()||check>nextDue;
+    });
   };
 
   // Task stats calculator (ignores first cycle)
@@ -597,6 +640,129 @@ export default function App(){
       </div></div>;
   }
 
+  // MEAL PLANNER VIEW
+  if(view==="meals"){
+    const today=new Date();today.setHours(0,0,0,0);
+    const monday=new Date(today);monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
+    const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d;});
+    const MEAL_LABELS=["Breakfast","Lunch","Dinner"];
+    const[mealInput,setMealInput]=useState({date:null,label:null,text:""});
+    return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
+      <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={()=>setView("today")} className="text-base font-semibold text-stone-400">&#8592; Back</button>
+        </div>
+        <h1 className="text-2xl font-black text-stone-900 mb-4">&#127860; Meal Planner</h1>
+        <div className="space-y-3">
+          {weekDays.map(day=>{
+            const dateStr=day.toISOString().split("T")[0];
+            const dayName=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][day.getDay()];
+            const dayNum=day.getDate();
+            const isToday=day.toDateString()===today.toDateString();
+            const dayMeals=getMealsForDate(dateStr);
+            const isAdding=mealInput.date===dateStr;
+            return<div key={dateStr} className={`rounded-2xl p-4 ${isToday?"bg-blue-50 border-2 border-blue-200":"bg-stone-50 border border-stone-100"}`}>
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-sm font-extrabold ${isToday?"text-blue-700":"text-stone-800"}`}>{dayName} {dayNum}</p>
+                {!isAdding&&<button onClick={()=>setMealInput({date:dateStr,label:"Dinner",text:""})}
+                  className="text-xs font-bold text-stone-300 active:text-stone-500">+ Add</button>}
+              </div>
+              {dayMeals.length===0&&!isAdding&&<p className="text-xs text-stone-300">No meals planned</p>}
+              {dayMeals.map(m=>(
+                <div key={m.id} className="flex items-center justify-between py-1">
+                  <div>
+                    <span className="text-xs font-semibold text-stone-400">{m.label}: </span>
+                    <span className="text-sm font-medium text-stone-700">{m.name}</span>
+                  </div>
+                  <button onClick={()=>removeMeal(m.id)} className="text-stone-200 text-xs active:text-stone-400">&#10005;</button>
+                </div>
+              ))}
+              {isAdding&&<div className="mt-2 space-y-2">
+                <div className="flex gap-1.5">
+                  {MEAL_LABELS.map(l=><button key={l} onClick={()=>setMealInput({...mealInput,label:l})}
+                    className="px-3 py-1 rounded-full text-xs font-bold"
+                    style={mealInput.label===l?{background:"#1D4ED8",color:"#fff"}:{background:"#fff",color:"#78716C"}}>{l}</button>)}
+                </div>
+                <div className="flex gap-2">
+                  <input value={mealInput.text} onChange={e=>setMealInput({...mealInput,text:e.target.value})}
+                    onKeyDown={e=>{if(e.key==="Enter"){addMeal(mealInput.date,mealInput.label,mealInput.text);setMealInput({date:null,label:null,text:""});}}}
+                    placeholder="What's cooking?" autoFocus
+                    className="flex-1 px-3 py-2 rounded-xl border-2 border-stone-200 text-sm font-medium focus:outline-none focus:border-blue-400"/>
+                  <button onClick={()=>{addMeal(mealInput.date,mealInput.label,mealInput.text);setMealInput({date:null,label:null,text:""});}}
+                    className="px-3 py-2 rounded-xl bg-stone-900 text-white text-sm font-bold active:scale-95">Add</button>
+                </div>
+                <button onClick={()=>setMealInput({date:null,label:null,text:""})} className="text-xs text-stone-300">Cancel</button>
+              </div>}
+            </div>;
+          })}
+        </div>
+      </div></div>;
+  }
+
+  // CALENDAR VIEW
+  if(view==="calendar"){
+    const today=new Date();today.setHours(0,0,0,0);
+    const monday=new Date(today);monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
+    const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d;});
+    const allEnriched=tasks.filter(t=>(!t.assigned_to||t.assigned_to===user)&&t.frequency_days>0).map(enrich);
+    return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
+      <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={()=>setView("today")} className="text-base font-semibold text-stone-400">&#8592; Back</button>
+        </div>
+        <h1 className="text-2xl font-black text-stone-900 mb-4">&#128197; This Week</h1>
+        <div className="space-y-2">
+          {weekDays.map(day=>{
+            const dayName=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][day.getDay()];
+            const dayNum=day.getDate();
+            const isToday=day.toDateString()===today.toDateString();
+            const isPast=day<today;
+            // Find tasks due on this day
+            const dueTasks=allEnriched.filter(t=>{
+              if(!t.last_completed){
+                const created=new Date(t.created_at);created.setHours(0,0,0,0);
+                return day>=created;
+              }
+              const last=new Date(t.last_completed);last.setHours(0,0,0,0);
+              const nextDue=new Date(last);nextDue.setDate(nextDue.getDate()+t.frequency_days);
+              nextDue.setHours(0,0,0,0);
+              return day.toDateString()===nextDue.toDateString()||(day>=nextDue&&day<=today);
+            });
+            // For future days, only show tasks becoming due that specific day
+            const futureTasks=allEnriched.filter(t=>{
+              if(!t.last_completed)return false;
+              const last=new Date(t.last_completed);last.setHours(0,0,0,0);
+              const nextDue=new Date(last);nextDue.setDate(nextDue.getDate()+t.frequency_days);
+              nextDue.setHours(0,0,0,0);
+              return day.toDateString()===nextDue.toDateString();
+            });
+            const show=isToday||isPast?dueTasks:futureTasks;
+            const dayMeals=getMealsForDate(day.toISOString().split("T")[0]);
+            return<div key={day.toDateString()}
+              className={`rounded-2xl p-4 ${isToday?"bg-stone-900 text-white":isPast?"bg-stone-50 opacity-60":"bg-stone-50"} border ${isToday?"border-stone-800":"border-stone-100"}`}>
+              <p className={`text-sm font-extrabold ${isToday?"text-white":"text-stone-800"} mb-1`}>
+                {dayName} {dayNum} {isToday&&<span className="text-xs font-semibold opacity-60 ml-1">today</span>}
+              </p>
+              {show.length===0&&dayMeals.length===0&&<p className={`text-xs ${isToday?"text-white/40":"text-stone-300"}`}>Clear</p>}
+              {show.map(t=>{const c=CAT[t.category]||CAT.home;return(
+                <div key={t.id} className="flex items-center gap-2 py-0.5">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:isToday?"#fff":c.accent}}/>
+                  <span className={`text-sm font-medium ${isToday?"text-white/90":"text-stone-600"}`}>{t.name}</span>
+                  <span className={`text-xs ${isToday?"text-white/40":"text-stone-300"}`}>{t.estimated_min}m</span>
+                </div>
+              );})}
+              {dayMeals.map(m=>(
+                <div key={m.id} className="flex items-center gap-2 py-0.5">
+                  <span className="text-xs">&#127860;</span>
+                  <span className={`text-sm font-medium ${isToday?"text-white/90":"text-stone-600"}`}>{m.label}: {m.name}</span>
+                </div>
+              ))}
+            </div>;
+          })}
+        </div>
+      </div></div>;
+  }
+
   // TODAY VIEW
   return(
     <div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
@@ -725,6 +891,18 @@ export default function App(){
 
         {/* Category nav */}
         <div className="mt-6 grid grid-cols-2 gap-2.5">
+          <button onClick={()=>setView("meals")}
+            className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-orange-50">
+            <p className="text-sm font-extrabold text-orange-700">&#127860; Meal Planner</p>
+            <p className="text-xs font-semibold text-orange-400 mt-0.5">Plan the week</p>
+          </button>
+          <button onClick={()=>setView("calendar")}
+            className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-indigo-50">
+            <p className="text-sm font-extrabold text-indigo-700">&#128197; Calendar</p>
+            <p className="text-xs font-semibold text-indigo-400 mt-0.5">Week at a glance</p>
+          </button>
+        </div>
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
           <button onClick={()=>setView("shop")}
             className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-amber-50">
             <p className="text-sm font-extrabold text-amber-700">&#128722; Shopping List</p>
