@@ -707,12 +707,6 @@ export default function App(){
           </div>
         </div>}
 
-        {/* Just 5 minutes */}
-        {dailyTasks.length>0&&<button onClick={justFiveMin}
-          className="w-full mt-4 py-3.5 rounded-2xl bg-stone-900 text-white text-base font-extrabold active:scale-[0.98] transition-all">
-          Just 5 minutes &#9889;
-        </button>}
-
         {/* Momentum prompt */}
         {momentum&&<div className="mt-4 rounded-2xl bg-emerald-50 border-2 border-emerald-100 p-5">
           <p className="text-sm font-bold text-emerald-800 mb-1">Nice work! Keep going?</p>
