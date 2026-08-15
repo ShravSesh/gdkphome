@@ -377,23 +377,6 @@ export default function App(){
   };
   const getMealsForDate=(date)=>meals.filter(m=>m.date===date);
 
-  // Calendar helper: get tasks due on a specific date
-  const getTasksDueOn=(dateObj)=>{
-    const myTasks=tasks.filter(t=>(!t.assigned_to||t.assigned_to===user)&&t.frequency_days>0);
-    return myTasks.map(enrich).filter(t=>{
-      if(!t.last_completed){
-        // Never completed = due today or earlier
-        const created=new Date(t.created_at);created.setHours(0,0,0,0);
-        const target=new Date(dateObj);target.setHours(0,0,0,0);
-        return target>=created;
-      }
-      const last=new Date(t.last_completed);last.setHours(0,0,0,0);
-      const nextDue=new Date(last);nextDue.setDate(nextDue.getDate()+t.frequency_days);
-      const check=new Date(dateObj);check.setHours(0,0,0,0);
-      return check.toDateString()===nextDue.toDateString()||check>nextDue;
-    });
-  };
-
   // Task stats calculator (ignores first cycle)
   const getTaskStats=(task)=>{
     const history=(task.history||[]).length>0?task.history:
@@ -698,70 +681,6 @@ export default function App(){
       </div></div>;
   }
 
-  // CALENDAR VIEW
-  if(view==="calendar"){
-    const today=new Date();today.setHours(0,0,0,0);
-    const monday=new Date(today);monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
-    const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d;});
-    const allEnriched=tasks.filter(t=>(!t.assigned_to||t.assigned_to===user)&&t.frequency_days>0).map(enrich);
-    return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
-      <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={()=>setView("today")} className="text-base font-semibold text-stone-400">&#8592; Back</button>
-        </div>
-        <h1 className="text-2xl font-black text-stone-900 mb-4">&#128197; This Week</h1>
-        <div className="space-y-2">
-          {weekDays.map(day=>{
-            const dayName=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][day.getDay()];
-            const dayNum=day.getDate();
-            const isToday=day.toDateString()===today.toDateString();
-            const isPast=day<today;
-            // Find tasks due on this day
-            const dueTasks=allEnriched.filter(t=>{
-              if(!t.last_completed){
-                const created=new Date(t.created_at);created.setHours(0,0,0,0);
-                return day>=created;
-              }
-              const last=new Date(t.last_completed);last.setHours(0,0,0,0);
-              const nextDue=new Date(last);nextDue.setDate(nextDue.getDate()+t.frequency_days);
-              nextDue.setHours(0,0,0,0);
-              return day.toDateString()===nextDue.toDateString()||(day>=nextDue&&day<=today);
-            });
-            // For future days, only show tasks becoming due that specific day
-            const futureTasks=allEnriched.filter(t=>{
-              if(!t.last_completed)return false;
-              const last=new Date(t.last_completed);last.setHours(0,0,0,0);
-              const nextDue=new Date(last);nextDue.setDate(nextDue.getDate()+t.frequency_days);
-              nextDue.setHours(0,0,0,0);
-              return day.toDateString()===nextDue.toDateString();
-            });
-            const show=isToday||isPast?dueTasks:futureTasks;
-            const dayMeals=getMealsForDate(day.toISOString().split("T")[0]);
-            return<div key={day.toDateString()}
-              className={`rounded-2xl p-4 ${isToday?"bg-stone-900 text-white":isPast?"bg-stone-50 opacity-60":"bg-stone-50"} border ${isToday?"border-stone-800":"border-stone-100"}`}>
-              <p className={`text-sm font-extrabold ${isToday?"text-white":"text-stone-800"} mb-1`}>
-                {dayName} {dayNum} {isToday&&<span className="text-xs font-semibold opacity-60 ml-1">today</span>}
-              </p>
-              {show.length===0&&dayMeals.length===0&&<p className={`text-xs ${isToday?"text-white/40":"text-stone-300"}`}>Clear</p>}
-              {show.map(t=>{const c=CAT[t.category]||CAT.home;return(
-                <div key={t.id} className="flex items-center gap-2 py-0.5">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:isToday?"#fff":c.accent}}/>
-                  <span className={`text-sm font-medium ${isToday?"text-white/90":"text-stone-600"}`}>{t.name}</span>
-                  <span className={`text-xs ${isToday?"text-white/40":"text-stone-300"}`}>{t.estimated_min}m</span>
-                </div>
-              );})}
-              {dayMeals.map(m=>(
-                <div key={m.id} className="flex items-center gap-2 py-0.5">
-                  <span className="text-xs">&#127860;</span>
-                  <span className={`text-sm font-medium ${isToday?"text-white/90":"text-stone-600"}`}>{m.label}: {m.name}</span>
-                </div>
-              ))}
-            </div>;
-          })}
-        </div>
-      </div></div>;
-  }
-
   // TODAY VIEW
   return(
     <div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
@@ -836,11 +755,17 @@ export default function App(){
               </div>
             </div>;})}
 
-          {/* Add to today button */}
-          <button onClick={()=>setPicking(!picking)}
-            className="w-full py-3 rounded-2xl border-2 border-dashed border-stone-200 text-sm font-bold text-stone-400 active:bg-stone-50 transition-all">
-            {picking?"Cancel":"+ Add task to today"}
-          </button>
+          {/* Add to today buttons */}
+          <div className="flex gap-2">
+            <button onClick={()=>setPicking(!picking)}
+              className="flex-1 py-3 rounded-2xl border-2 border-dashed border-stone-200 text-sm font-bold text-stone-400 active:bg-stone-50 transition-all">
+              {picking?"Cancel":"+ Add task"}
+            </button>
+            {pickable.length>0&&<button onClick={()=>{saveDailyIds([...dailyIds,...pickable.map(t=>t.id)]);}}
+              className="py-3 px-4 rounded-2xl bg-stone-900 text-white text-sm font-bold active:scale-95 transition-all">
+              Add all ({pickable.length})
+            </button>}
+          </div>
         </div>
 
         {/* Task picker */}
@@ -889,27 +814,20 @@ export default function App(){
         </div>
 
         {/* Category nav */}
-        <div className="mt-6 grid grid-cols-2 gap-2.5">
+        <div className="mt-6 grid grid-cols-3 gap-2.5">
           <button onClick={()=>setView("meals")}
             className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-orange-50">
-            <p className="text-sm font-extrabold text-orange-700">&#127860; Meal Planner</p>
+            <p className="text-sm font-extrabold text-orange-700">&#127860; Meals</p>
             <p className="text-xs font-semibold text-orange-400 mt-0.5">Plan the week</p>
           </button>
-          <button onClick={()=>setView("calendar")}
-            className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-indigo-50">
-            <p className="text-sm font-extrabold text-indigo-700">&#128197; Calendar</p>
-            <p className="text-xs font-semibold text-indigo-400 mt-0.5">Week at a glance</p>
-          </button>
-        </div>
-        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
           <button onClick={()=>setView("shop")}
             className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-amber-50">
-            <p className="text-sm font-extrabold text-amber-700">&#128722; Shopping List</p>
+            <p className="text-sm font-extrabold text-amber-700">&#128722; Shopping</p>
             <p className="text-xs font-semibold text-amber-500 mt-0.5">{shopItems.filter(s=>!s.completed).length} items</p>
           </button>
           <button onClick={()=>setView("stats")}
             className="rounded-2xl p-4 text-left active:scale-95 transition-all bg-stone-100">
-            <p className="text-sm font-extrabold text-stone-700">&#128202; Task Stats</p>
+            <p className="text-sm font-extrabold text-stone-700">&#128202; Stats</p>
             <p className="text-xs font-semibold text-stone-400 mt-0.5">How you're doing</p>
           </button>
         </div>
