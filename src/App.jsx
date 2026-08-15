@@ -256,15 +256,6 @@ export default function App(){
     await load();
   };
 
-  // Just 5 minutes
-  const justFiveMin=()=>{
-    const enriched=tasks.map(enrich);
-    const pool=dailyTasks.length>0?dailyTasks:enriched.filter(isDue).sort((a,b)=>(b.u+pw(b.priority))-(a.u+pw(a.priority)));
-    if(!pool.length)return;
-    const pick=pool[0];
-    setTimer({...pick,estimated_min:5,_originalMin:pick.estimated_min});
-  };
-
   // Smart task parser
   const parseTask=(text)=>{
     const lo=text.toLowerCase();
