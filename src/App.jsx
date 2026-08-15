@@ -132,6 +132,8 @@ export default function App(){
   const[shopItems,setShopItems]=useState([]);
   const[shopInput,setShopInput]=useState("");
   const[meals,setMeals]=useState([]);
+  const[mealInput,setMealInput]=useState({date:null,label:null,text:""});
+  const[statsData,setStatsData]=useState(null);
   const[knownUsers,setKnownUsers]=useState([]);
 
   // Discover all users who have signed in
@@ -168,6 +170,17 @@ export default function App(){
     if(data)setMeals(data);
   },[]);
   useEffect(()=>{loadMeals();},[loadMeals]);
+
+  // Load stats data
+  useEffect(()=>{
+    supabase.from("completions").select("task_id,completed_at").order("completed_at")
+      .then(({data})=>{
+        if(!data)return;
+        const byTask={};
+        data.forEach(c=>{if(!byTask[c.task_id])byTask[c.task_id]=[];byTask[c.task_id].push(c.completed_at);});
+        setStatsData(byTask);
+      });
+  },[tasks]);
 
   useEffect(()=>{
     const ch=supabase.channel("rt")
@@ -575,19 +588,6 @@ export default function App(){
 
   // STATS VIEW
   if(view==="stats"){
-    const[statsData,setStatsData]=useState(null);
-    useEffect(()=>{
-      supabase.from("completions").select("task_id,completed_at").order("completed_at")
-        .then(({data})=>{
-          if(!data)return;
-          const byTask={};
-          data.forEach(c=>{
-            if(!byTask[c.task_id])byTask[c.task_id]=[];
-            byTask[c.task_id].push(c.completed_at);
-          });
-          setStatsData(byTask);
-        });
-    },[]);
     const allTasks=tasks.map(enrich).filter(t=>(!t.assigned_to||t.assigned_to===user));
     return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
       <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
@@ -646,7 +646,6 @@ export default function App(){
     const monday=new Date(today);monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
     const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);return d;});
     const MEAL_LABELS=["Breakfast","Lunch","Dinner"];
-    const[mealInput,setMealInput]=useState({date:null,label:null,text:""});
     return<div className="min-h-screen bg-white" style={{paddingTop:"env(safe-area-inset-top)"}}>
       <div className="max-w-lg mx-auto px-5 pt-10 pb-8">
         <div className="flex items-center justify-between mb-4">
