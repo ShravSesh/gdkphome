@@ -199,8 +199,19 @@ export default function App(){
     const stored=localStorage.getItem(key);
     const parsed=stored?JSON.parse(stored):null;
     if(parsed&&parsed.date===today){
-      const valid=parsed.ids.filter(id=>tasks.find(t=>t.id===id));
-      if(valid.length>0){setDailyIds(valid);return;}
+      // Filter out tasks that no longer exist OR were completed today (by anyone)
+      const todayStart=new Date();todayStart.setHours(0,0,0,0);
+      const valid=parsed.ids.filter(id=>{
+        const t=tasks.find(x=>x.id===id);
+        if(!t)return false;
+        // Remove if completed today (partner did it)
+        if(t.last_completed&&new Date(t.last_completed)>=todayStart)return false;
+        return true;
+      });
+      if(valid.length>0){
+        if(valid.length!==parsed.ids.length)saveDailyIds(valid); // save trimmed list
+        setDailyIds(valid);return;
+      }
     }
     // Generate fresh daily tasks
     const ids=selectDaily(tasks.map(enrich),user).map(t=>t.id);
