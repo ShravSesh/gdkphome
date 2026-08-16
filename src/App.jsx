@@ -436,7 +436,14 @@ export default function App(){
 
   const now=new Date();
   const dateStr=`${DAYS[now.getDay()]}, ${MONTHS[now.getMonth()]} ${now.getDate()}`;
-  const dailyTasks=dailyIds.map(id=>tasks.find(t=>t.id===id)).filter(Boolean).map(enrich);
+  const dailyTasks=dailyIds.map(id=>tasks.find(t=>t.id===id)).filter(Boolean).map(enrich)
+    .filter(t=>{
+      // Remove tasks already completed today (by anyone)
+      if(!t.last_completed)return true;
+      const last=new Date(t.last_completed);
+      const now=new Date();
+      return last.toDateString()!==now.toDateString();
+    });
 
   // Load completed today
   useEffect(()=>{
